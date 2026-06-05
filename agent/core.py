@@ -15,10 +15,10 @@ from __future__ import annotations  # 启用类型注解的延迟求值，避免
 
 import asyncio       # 异步 I/O 支持，用于并行执行多个规划任务
 import json          # JSON 序列化 / 反序列化，处理天气等工具返回的数据
-import logging       # 日志记录，方便排查运行时问题
+import logging
 import time as _time # 时间测量，用于统计每个步骤的执行耗时
 import uuid          # 生成唯一会话 ID
-from typing import Any  # 通用的类型注解
+from typing import Any
 
 
 # ──────────────────────────────────────────────
@@ -42,10 +42,10 @@ from agent.reasoning import (
 )
 
 # 导入规划器模块 —— 各司其职，分别处理旅行规划的特定环节
-from agent.planner.destination import get_destination_intro  # 目的地介绍生成
-from agent.planner.itinerary import generate_itinerary       # 行程安排生成
+from agent.planner.destination import get_destination_intro
+from agent.planner.itinerary import generate_itinerary
 from agent.planner.food_stay import recommend_food, recommend_accommodation  # 美食与住宿推荐
-from agent.planner.transport import plan_transport           # 交通方案规划
+from agent.planner.transport import plan_transport
 from agent.planner.adjuster import dynamic_adjuster          # 动态调整器，根据天气等因素优化行程
 
 logger = logging.getLogger("travel_agent.core")  # 获取当前模块的日志记录器
@@ -111,7 +111,7 @@ class TravelAgent:
         self.mcts = MCTSEngine()           # 蒙特卡洛树搜索引擎
         self.reflexion = ReflexionEngine() # 自我反思引擎
         self.decomposer = TaskDecomposer() # 任务分解引擎
-        self.selector = StrategySelector() # 策略自动选择器
+        self.selector = StrategySelector()
 
     async def chat(
         self,
@@ -133,7 +133,7 @@ class TravelAgent:
         # 如果没有传入会话 ID，自动生成一个 12 字符的十六进制随机串
         session_id = session_id or uuid.uuid4().hex[:12]
 
-        # 尝试在记忆存储中创建会话记录（如果会话已存在则忽略错误）
+        # 尝试创建会话记录，失败时记录错误但不阻塞后续流程
         try:
             await memory_store.create_session(session_id)
         except Exception as e:
@@ -157,7 +157,6 @@ class TravelAgent:
                 extra_lines.append(f"[历史回复] {m['content'][:200]}")  # 最近回复摘要
         system_extra = "\n".join(extra_lines) if extra_lines else ""
 
-        # 调用策略选择器，决定本次对话使用哪种推理策略
         selected = self.selector.select(message, strategy)
         logger.info("Session=%s strategy=%s message=%.100s...", session_id, selected, message)
 
@@ -178,16 +177,16 @@ class TravelAgent:
                 # ReAct 策略：推理 + 工具调用交替进行，注入记忆上下文作为额外系统指令
                 result = await self.react.reason(message, tools_desc, call_tool, system_extra=system_extra)
             elif selected == "cot":
-                # CoT 策略：纯思维链推理，注入记忆上下文
+                # CoT 策略：纯思维链推理
                 result = await self.cot.reason(message, system_extra=system_extra)
             elif selected == "tot":
-                # ToT 策略：思维树，注入记忆上下文
+                # ToT 策略：思维树
                 result = await self.tot.reason(message, system_extra=system_extra)
             elif selected == "mcts":
-                # MCTS 策略：蒙特卡洛树搜索，注入记忆上下文
+                # MCTS 策略：蒙特卡洛树搜索
                 result = await self.mcts.reason(message, system_extra=system_extra)
             elif selected == "reflexion":
-                # Reflexion 策略：自我反思改进，注入记忆上下文
+                # Reflexion 策略：自我反思改进
                 result = await self.reflexion.reason(message, system_extra=system_extra)
             elif selected == "decompose":
                 # Decompose 策略：先分解任务，再对每个子任务执行 ReAct 推理
@@ -210,7 +209,6 @@ class TravelAgent:
             answer = f"抱歉，处理您的请求时遇到错误: {e}。请稍后重试。"
             result = {"answer": answer}
 
-        # 从推理结果中提取回答文本
         answer = result.get("answer", "")
 
         # 将助手的回答持久化保存到记忆存储中，同时附带元数据（所用策略、推理步骤数）
@@ -222,7 +220,6 @@ class TravelAgent:
         except Exception as e:
             logger.error("Failed to save assistant message: %s", e)
 
-        # 返回标准化的响应格式：会话 ID、回答文本、所用策略
         return {
             "session_id": session_id,
             "response": answer,
@@ -238,7 +235,7 @@ class TravelAgent:
           2. 获取目的地介绍
           3. 生成详细行程安排
           4-6. 并行查询美食、住宿和交通方案
-          7. 根据天气和人数动态调整行程
+          7. 根据天气、人数和预算动态调整行程
           8. 生成出行温馨提示
 
         每个步骤都有独立的 try/except 保护，确保单个步骤失败不影响整体流程。
@@ -246,8 +243,8 @@ class TravelAgent:
         # 在函数内部导入 TravelPlanRequest 模型，避免模块级别的循环依赖
         from models.schemas import TravelPlanRequest
 
-        req: TravelPlanRequest = request       # 类型强转，获得类型提示支持
-        session_id = uuid.uuid4().hex[:12]     # 为本次规划生成唯一的会话 ID
+        req: TravelPlanRequest = request       # 类型注解，获得 IDE 类型提示支持
+        session_id = uuid.uuid4().hex[:12]
 
         # 创建会话记录（失败不影响后续流程）
         try:
@@ -465,7 +462,7 @@ class TravelAgent:
         返回：
             温馨提示字符串列表。
         """
-        tips = []  # 初始化空列表，逐步添加提示项
+        tips = []
 
         # ───────────── 基于天气的提示 ─────────────
         if weather_data and "forecast" in weather_data:

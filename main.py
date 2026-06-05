@@ -16,11 +16,11 @@ API 端点一览：
 
 from __future__ import annotations  # 启用类型注解的延迟求值，避免循环导入
 
-import logging   # 日志记录
+import logging
 import time      # 用于计算请求处理耗时
 from contextlib import asynccontextmanager  # 异步上下文管理器，用于实现 FastAPI lifespan
 
-from fastapi import FastAPI, HTTPException, Request  # FastAPI 核心组件
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware    # CORS 中间件，允许跨域请求
 from fastapi.responses import StreamingResponse, HTMLResponse  # 流式响应和 HTML 响应
 
@@ -35,7 +35,7 @@ from agent.core import travel_agent    # 全局 TravelAgent 单例
 from agent.mcp.provider import mcp_provider  # MCP 工具提供器
 from agent.memory import memory_store        # 记忆存储
 
-logger = logging.getLogger("travel_agent.server")  # 获取当前模块的日志记录器
+logger = logging.getLogger("travel_agent.server")
 
 
 # ────────────────────────────────────────────
@@ -76,7 +76,7 @@ app = FastAPI(
     title="Travel AI Agent",
     description="基于 DeepSeek 的智能旅行规划 Agent，支持 ReAct/CoT/ToT/MCTS/Reflexion 多种推理策略",
     version="1.0.0",
-    lifespan=lifespan,  # 注册生命周期处理器
+    lifespan=lifespan,
 )
 
 # ────────────────────────────────────────────
@@ -194,7 +194,23 @@ async def root():
         </div>
         <div class="field">
           <label>出发地</label>
-          <input name="departure_from" value="北京">
+          <select name="departure_from">
+            <option value="上海" selected>上海</option>
+            <option value="北京">北京</option>
+            <option value="广州">广州</option>
+            <option value="深圳">深圳</option>
+            <option value="成都">成都</option>
+            <option value="杭州">杭州</option>
+            <option value="南京">南京</option>
+            <option value="武汉">武汉</option>
+            <option value="重庆">重庆</option>
+            <option value="西安">西安</option>
+            <option value="长沙">长沙</option>
+            <option value="厦门">厦门</option>
+            <option value="青岛">青岛</option>
+            <option value="苏州">苏州</option>
+            <option value="天津">天津</option>
+          </select>
         </div>
       </div>
       <!-- 第二行：出发日期 + 结束日期 -->
@@ -427,7 +443,7 @@ async def chat(req: ChatRequest):
 @app.post("/api/plan")
 async def plan_travel(req: TravelPlanRequest):
     """生成完整旅行规划，保存为本地 md 文件。"""
-    import os                    # 文件和路径操作
+    import os
     from datetime import datetime  # 生成时间戳用于文件名
 
     try:
@@ -436,20 +452,18 @@ async def plan_travel(req: TravelPlanRequest):
 
         # 将完整规划保存到本地 outputs 目录下的 markdown 文件
         output_dir = "outputs"
-        os.makedirs(output_dir, exist_ok=True)  # 确保目录存在
+        os.makedirs(output_dir, exist_ok=True)
 
         # 文件名格式：目的地_开始日期_结束日期_时间戳.md
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{req.destination}_{req.start_date}_{req.end_date}_{timestamp}.md"
         filepath = os.path.join(output_dir, filename)
 
-        # 将完整的 Markdown 响应写入文件
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(result["full_response"])
 
         logger.info("Plan saved to %s", filepath)
 
-        # 返回保存成功的信息
         return {
             "status": "ok",
             "file": filepath,
@@ -524,8 +538,8 @@ async def chat_stream(req: ChatRequest):
         try:
             # 如果没有会话 ID 则自动生成
             sid = req.session_id or uuid.uuid4().hex[:12]
-            await memory_store.create_session(sid)            # 创建会话记录
-            await memory_store.add_message(sid, "user", req.message)  # 保存用户消息
+            await memory_store.create_session(sid)
+            await memory_store.add_message(sid, "user", req.message)
 
             # 构建记忆上下文（用户偏好 + 历史消息），注入 system prompt
             memory_context = await memory_store.build_context(sid, req.message)
@@ -537,7 +551,7 @@ async def chat_stream(req: ChatRequest):
                     extra_lines.append(f"[历史回复] {m['content'][:200]}")
             memory_ctx = "\n".join(extra_lines) if extra_lines else ""
 
-            # 使用策略选择器获取最适合的 system prompt 风格
+            # 使用策略选择器确定推理策略名称，用于匹配对应的策略提示
             from agent.core import StrategySelector
             strategy_name = StrategySelector.select(req.message, req.strategy) if hasattr(StrategySelector, 'select') else "react"
 
@@ -560,7 +574,7 @@ async def chat_stream(req: ChatRequest):
                 {"role": "user", "content": req.message},
             ]
 
-            full = ""  # 累积完整回答文本
+            full = ""
             # 逐块读取 LLM 的流式输出
             async for chunk in llm_stream(messages):
                 full += chunk
@@ -576,7 +590,6 @@ async def chat_stream(req: ChatRequest):
             logger.exception("Stream error")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-    # 返回 StreamingResponse，media_type 指定为 SSE 的 MIME 类型
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 

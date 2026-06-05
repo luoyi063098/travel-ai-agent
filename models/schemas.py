@@ -5,8 +5,8 @@ Pydantic 数据模型定义（请求 / 响应 / 枚举）。
 
 from __future__ import annotations                      # 启用类型注解的延迟求值，支持前向引用
 
-from enum import Enum                                    # 枚举基类，用于定义固定取值集合
-from typing import Optional                              # 可选类型，表示字段可以为 None
+from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel, Field                    # BaseModel：Pydantic 数据模型基类；Field：字段约束与描述
 
@@ -34,7 +34,7 @@ class TravelPlanRequest(BaseModel):
     destination: str = Field(..., description="目的地城市/地区")          # 必填：旅游目的地
     start_date: str = Field(..., description="出发日期 YYYY-MM-DD")      # 必填：行程开始日期
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD")        # 必填：行程结束日期
-    departure_from: str = Field(default="北京", description="出发城市")   # 出发城市，默认北京
+    departure_from: str = Field(default="上海", description="出发城市")   # 出发城市，默认上海
     travel_mode: TravelMode = Field(default=TravelMode.TRAIN)            # 首选交通方式，默认火车
     num_travelers: int = Field(default=1, ge=1)                          # 出行总人数，至少 1 人
     num_elderly: int = Field(default=0, ge=0, description="老人数量")    # 同行老人数量

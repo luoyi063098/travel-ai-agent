@@ -5,10 +5,10 @@ Self-improvement loop: Generate → Evaluate → Reflect → Revise → Re-evalu
 The agent critiques its own output and iteratively improves it.
 """
 
-from __future__ import annotations  # 启用延迟求值类型注解，支持在类型提示中使用类名自引用
+from __future__ import annotations
 
-from agent.llm import chat  # 导入与大语言模型进行对话的异步函数
-from config import MAX_REFLECTION_ROUNDS  # 导入配置中定义的最大自反思迭代轮数
+from agent.llm import chat
+from config import MAX_REFLECTION_ROUNDS
 
 REFLEXION_GENERATE_PROMPT = """你是一个旅行规划助手。请根据以下要求生成旅行规划。
 

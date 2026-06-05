@@ -5,12 +5,12 @@ Explores multiple reasoning paths in parallel, evaluates them, and selects the b
 Good for comparison tasks: A vs B, multiple itinerary options, etc.
 """
 
-from __future__ import annotations  # 启用延迟求值类型注解，支持在类型提示中使用类名自引用
+from __future__ import annotations
 
-import asyncio  # 异步 I/O 支持，在此文件中用于并发（虽未显式使用，但 async/await 依赖此模块）
+import asyncio
 
-from agent.llm import chat  # 导入与大语言模型进行对话的异步函数
-from config import TOT_BREADTH, TOT_DEPTH  # 导入树搜索的宽度（每层候选数）和深度（扩展层数）配置
+from agent.llm import chat
+from config import TOT_BREADTH, TOT_DEPTH
 
 TOT_EVALUATE_PROMPT = """你是一个旅行规划评估专家。请评估以下方案的质量。
 

@@ -5,9 +5,9 @@ Generates step-by-step reasoning for tasks that benefit from explicit intermedia
 No tool use - pure reasoning chain.
 """
 
-from __future__ import annotations  # 启用延迟求值类型注解，支持在类型提示中使用类名自引用
+from __future__ import annotations
 
-from agent.llm import chat  # 导入与大语言模型进行对话的异步函数
+from agent.llm import chat
 
 COT_SYSTEM_PROMPT = """你是一个旅行规划助手。使用 Chain of Thought (思维链) 模式进行逐步推理。
 

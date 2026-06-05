@@ -7,14 +7,14 @@ The ReAct pattern interleaves reasoning steps and tool-calling actions:
 This is the default strategy for tasks requiring tool use (weather lookups, etc.).
 """
 
-from __future__ import annotations  # 启用 PEP 604 的延迟求值类型注解，允许在类型提示中使用类名自引用
+from __future__ import annotations
 
-import json  # 用于解析 Action Input 中的 JSON 参数字符串
-import re  # 用于正则解析模型输出的 Thought / Action / Final Answer 等字段
-from typing import Any, Callable  # 类型注解：Any 表示任意类型，Callable 表示可调用对象
+import json
+import re
+from typing import Any, Callable
 
-from agent.llm import chat  # 导入与大语言模型进行对话的异步函数
-from config import MAX_REACT_STEPS  # 导入配置中定义的最大 ReAct 循环步数
+from agent.llm import chat
+from config import MAX_REACT_STEPS
 
 
 REACT_SYSTEM_PROMPT = """你是一个资深的旅行规划顾问，拥有丰富的旅行策划经验。使用 ReAct 模式来思考和行动。
@@ -64,10 +64,10 @@ class ReActEngine:
 
     async def reason(
         self,
-        task: str,  # 用户提出的原始任务描述
-        tools_description: str,  # 可用工具的描述文本（由调用方生成）
-        call_tool: Callable[[str, dict], Any],  # 异步回调函数，接收 (工具名, 参数字典) 并返回执行结果
-        system_extra: str = "",  # 可选的额外系统提示内容，追加到 system prompt 末尾
+        task: str,
+        tools_description: str,
+        call_tool: Callable[[str, dict], Any],  # 接收 (工具名, 参数字典) 并返回执行结果
+        system_extra: str = "",
     ) -> dict:
         """
         Execute ReAct loop.

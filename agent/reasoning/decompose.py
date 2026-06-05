@@ -5,11 +5,11 @@ Breaks down complex travel planning tasks into ordered subtasks.
 Each subtask has dependencies and can be executed independently.
 """
 
-from __future__ import annotations  # 启用延迟求值类型注解，支持在类型提示中使用类名自引用
+from __future__ import annotations
 
-import json  # 用于解析 LLM 返回的 JSON 格式子任务列表
+import json
 
-from agent.llm import chat  # 导入与大语言模型进行对话的异步函数
+from agent.llm import chat
 
 DECOMPOSE_SYSTEM_PROMPT = """你是一个任务分解专家。将复杂的旅行规划任务拆解为可执行的子任务。
 

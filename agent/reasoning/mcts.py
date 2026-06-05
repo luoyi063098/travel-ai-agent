@@ -7,13 +7,13 @@ Good for optimization problems like route planning, itinerary optimization.
 MCTS steps: Selection → Expansion → Simulation → Backpropagation
 """
 
-from __future__ import annotations  # 启用延迟求值类型注解，支持在类型提示中使用类名自引用
+from __future__ import annotations
 
 import math  # 提供数学函数，用于 UCB1 公式中的对数计算
 import random  # 提供随机选择功能，用于 Simulate 阶段随机选取子节点
 
-from agent.llm import chat  # 导入与大语言模型进行对话的异步函数
-from config import MCTS_ITERATIONS  # 导入配置中定义的 MCTS 迭代次数
+from agent.llm import chat
+from config import MCTS_ITERATIONS
 
 MCTS_EVALUATE_PROMPT = """评估以下旅行计划的质量（1-10分），只返回数字。
 

@@ -5,8 +5,8 @@ MCP（Model Context Protocol）提供商模块。
 
 from __future__ import annotations                      # 启用类型注解的延迟求值
 
-import json                                              # JSON 序列化，用于将工具执行结果转为字符串
-from typing import Any                                   # 任意类型，用于工具对象类型标注
+import json
+from typing import Any
 
 from models.schemas import MCPCallToolResponse, ToolInfo  # MCP 协议数据模型：调用响应和工具信息
 from agent.mcp.weather import WeatherTool                 # 天气查询工具

@@ -5,7 +5,7 @@
 
 from __future__ import annotations                      # 启用类型注解的延迟求值
 
-import math                                              # 数学函数库，用于三角函数和弧度计算
+import math
 
 # 中国主要城市经纬度字典。
 # 键为城市名称（中文），值为 (纬度, 经度) 二元组，单位：度。

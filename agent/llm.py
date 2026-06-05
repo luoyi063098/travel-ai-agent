@@ -5,8 +5,8 @@
 
 from __future__ import annotations                      # 启用类型注解的延迟求值
 
-import asyncio                                           # 异步 I/O 支持，用于非阻塞等待
-import logging                                           # 日志记录
+import asyncio
+import logging
 
 from openai import (                                     # OpenAI 兼容 SDK
     AsyncOpenAI,                                         # 异步 OpenAI 客户端

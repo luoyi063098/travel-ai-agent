@@ -1,5 +1,4 @@
 """Distance calculation tool for estimating travel distances between cities."""
-# 模块文档字符串：说明该模块的功能——估算城市间的旅行距离
 
 from __future__ import annotations
 # 启用 PEP 604 的类型注解语法（允许使用 | 代替 Union），让类型标注更简洁
@@ -11,10 +10,8 @@ from agent.mcp.city_data import lookup_coords, haversine_distance
 
 class DistanceTool:
     """Calculate approximate distance and travel time between cities."""
-    # 距离计算工具类，基于城市坐标和 Haversine 公式估算城市间的直线距离及出行时间
 
     name = "distance"
-    # 工具名称，用于在 MCP 协议中注册和路由调用
 
     description = "计算两个城市之间的直线距离和估算出行时间"
     # 工具的功能描述文本，LLM 会根据此描述决定何时调用该工具
@@ -25,8 +22,6 @@ class DistanceTool:
         "to_city": {"type": "string", "description": "目的城市名称"},
     }
     # 工具的参数 schema 定义
-    # from_city：出发城市（中文名称）
-    # to_city：目的地城市（中文名称）
     # LLM 会根据此 schema 从用户输入中提取参数值
 
     SPEEDS = {"car": 100, "train": 250, "plane": 700}
@@ -37,27 +32,16 @@ class DistanceTool:
     # 这些速度值是经验估算值，用于将距离换算为大致出行时间
 
     async def execute(self, from_city: str = "北京", to_city: str = "上海") -> dict:
-        # 核心执行方法，定义为 async 异步函数（保持与其他 MCP 工具一致的接口签名）
-        # from_city：出发城市名称，默认值"北京"
-        # to_city：目的地城市名称，默认值"上海"
-        # 返回值：包含距离、各交通方式估算时间及推荐方案的字典
 
         from_coords = lookup_coords(from_city)
-        # 调用 lookup_coords 函数，根据出发城市名称获取其经纬度坐标
-        # 如果城市名不在已知的城市坐标列表中，返回 None
 
         to_coords = lookup_coords(to_city)
-        # 调用 lookup_coords 函数，根据目的地城市名称获取其经纬度坐标
-        # 如果城市名不在已知的城市坐标列表中，返回 None
 
         if not from_coords:
             return {"error": f"未找到出发城市: {from_city}"}
-            # 如果出发城市坐标查找失败，立即返回错误信息
-            # 不再继续执行后续的距离计算逻辑
 
         if not to_coords:
             return {"error": f"未找到目的城市: {to_city}"}
-            # 如果目的城市坐标查找失败，立即返回错误信息
 
         distance = haversine_distance(from_coords[0], from_coords[1], to_coords[0], to_coords[1])
         # 调用 Haversine 球面距离公式计算两点间的直线距离
@@ -68,14 +52,10 @@ class DistanceTool:
 
         return {
             "from": from_city,
-            # 出发城市名称，原样返回
 
             "to": to_city,
-            # 目的地城市名称，原样返回
 
             "distance_km": round(distance),
-            # 计算得到的直线距离，四舍五入取整
-            # round() 函数将浮点数舍入到最接近的整数公里值
 
             "estimated_time": {
                 # 为不同交通工具估算出行时间
@@ -99,15 +79,10 @@ class DistanceTool:
             },
 
             "recommendation": self._recommend(distance),
-            # 根据距离范围推荐最合适的出行方式
-            # 调用静态方法 _recommend，基于经验阈值给出建议
         }
 
     @staticmethod
     def _recommend(distance: float) -> str:
-        # 静态方法：根据球面直线距离推荐最佳出行方式
-        # distance：两点间的直线距离，单位是公里
-        # 使用 staticmethod 因为该方法不需要访问类的实例属性
 
         if distance < 300:
             # 距离小于 300 公里：短途出行
