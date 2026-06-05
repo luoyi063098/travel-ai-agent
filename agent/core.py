@@ -16,6 +16,7 @@ from __future__ import annotations  # 启用类型注解的延迟求值，避免
 import asyncio       # 异步 I/O 支持，用于并行执行多个规划任务
 import json          # JSON 序列化 / 反序列化，处理天气等工具返回的数据
 import logging       # 日志记录，方便排查运行时问题
+import time as _time # 时间测量，用于统计每个步骤的执行耗时
 import uuid          # 生成唯一会话 ID
 from typing import Any  # 通用的类型注解
 
@@ -138,14 +139,23 @@ class TravelAgent:
         except Exception as e:
             logger.error("Failed to create session %s: %s", session_id, e)
 
-        # 从记忆存储中获取历史消息，并结合当前消息构建 LLM 上下文
-        messages_context = await memory_store.build_context(session_id, message)
-
         # 将用户消息持久化保存到记忆存储中
         try:
             await memory_store.add_message(session_id, "user", message)
         except Exception as e:
             logger.error("Failed to save user message: %s", e)
+
+        # 从记忆存储中获取历史消息和用户偏好，构建 LLM 上下文
+        # 此上下文会作为 system_extra 注入到推理引擎的 system prompt 中
+        memory_context = await memory_store.build_context(session_id, message)
+        # 提取偏好和历史消息，拼接为额外系统指令
+        extra_lines = []
+        for m in memory_context:
+            if m["role"] == "system":
+                extra_lines.append(m["content"])     # 用户偏好
+            elif m["role"] == "assistant":
+                extra_lines.append(f"[历史回复] {m['content'][:200]}")  # 最近回复摘要
+        system_extra = "\n".join(extra_lines) if extra_lines else ""
 
         # 调用策略选择器，决定本次对话使用哪种推理策略
         selected = self.selector.select(message, strategy)
@@ -165,26 +175,26 @@ class TravelAgent:
         # 根据选定的策略，路由到对应的推理引擎执行
         try:
             if selected == "react":
-                # ReAct 策略：推理 + 工具调用交替进行，需要传入工具描述和调用函数
-                result = await self.react.reason(message, tools_desc, call_tool)
+                # ReAct 策略：推理 + 工具调用交替进行，注入记忆上下文作为额外系统指令
+                result = await self.react.reason(message, tools_desc, call_tool, system_extra=system_extra)
             elif selected == "cot":
-                # CoT 策略：纯思维链推理，不需要工具
-                result = await self.cot.reason(message)
+                # CoT 策略：纯思维链推理，注入记忆上下文
+                result = await self.cot.reason(message, system_extra=system_extra)
             elif selected == "tot":
-                # ToT 策略：思维树，探索多条推理分支
-                result = await self.tot.reason(message)
+                # ToT 策略：思维树，注入记忆上下文
+                result = await self.tot.reason(message, system_extra=system_extra)
             elif selected == "mcts":
-                # MCTS 策略：蒙特卡洛树搜索，模拟多条路径
-                result = await self.mcts.reason(message)
+                # MCTS 策略：蒙特卡洛树搜索，注入记忆上下文
+                result = await self.mcts.reason(message, system_extra=system_extra)
             elif selected == "reflexion":
-                # Reflexion 策略：先生成初始方案，再进行自我反思和改进
-                result = await self.reflexion.reason(message)
+                # Reflexion 策略：自我反思改进，注入记忆上下文
+                result = await self.reflexion.reason(message, system_extra=system_extra)
             elif selected == "decompose":
                 # Decompose 策略：先分解任务，再对每个子任务执行 ReAct 推理
                 async def execute_subtask(subtask, context):
                     """执行单个子任务 —— 每个子任务都会调用 ReAct 引擎。"""
                     return await self.react.reason(
-                        subtask["description"], tools_desc, call_tool
+                        subtask["description"], tools_desc, call_tool, system_extra=system_extra
                     )
                 # 调用任务分解器：将大任务拆解为多个子任务，逐一执行
                 decomposed = await self.decomposer.execute(message, execute_subtask)
@@ -193,7 +203,7 @@ class TravelAgent:
                 result = {"answer": synthesis, "decomposed": decomposed}
             else:
                 # 兜底：遇到未知策略时回退到 ReAct
-                result = await self.react.reason(message, tools_desc, call_tool)
+                result = await self.react.reason(message, tools_desc, call_tool, system_extra=system_extra)
         except Exception as e:
             # 捕获推理过程中的任何异常，返回友好的错误提示给用户
             logger.error("Reasoning failed for session=%s strategy=%s: %s", session_id, selected, e)
@@ -246,7 +256,6 @@ class TravelAgent:
             logger.error("Failed to create plan session: %s", e)
 
         # 记录开始时间，用于统计每个步骤的耗时
-        import time as _time
         t0 = _time.time()
         logger.info(
             "Planning trip to %s (%s~%s) %d travelers elderly=%d children=%d mode=%s",
@@ -309,9 +318,20 @@ class TravelAgent:
         # ────────────────────────────────────────────
         t_parallel = _time.time()
         food, accommodation, transport = await asyncio.gather(
-            self._safe_food(req),           # 第 4 步：美食推荐（带异常保护）
-            self._safe_accommodation(req),   # 第 5 步：住宿推荐（带异常保护）
-            self._safe_transport(req),       # 第 6 步：交通规划（带异常保护）
+            self._safe_call("美食推荐", recommend_food,
+                req.destination, req.num_travelers,
+                req.num_elderly, req.num_children,
+                req.budget_min, req.budget_max),
+            self._safe_call("住宿推荐", recommend_accommodation,
+                req.destination, req.num_travelers,
+                req.num_elderly, req.num_children,
+                req.budget_min, req.budget_max),
+            self._safe_call("交通规划", plan_transport,
+                req.destination, req.departure_from,
+                req.start_date, req.end_date,
+                req.travel_mode.value, req.num_travelers,
+                req.num_elderly, req.num_children,
+                req.budget_min, req.budget_max),
         )
         logger.info("Food/Accommodation/Transport done (%.1fs)", _time.time() - t_parallel)
 
@@ -485,52 +505,21 @@ class TravelAgent:
         return tips
 
 
-    async def _safe_food(self, req) -> str:
+    async def _safe_call(self, name: str, fn, *args, **kwargs) -> str:
         """
-        带异常保护的美食推荐调用。
-        如果推荐服务发生异常，返回占位文本而非抛出异常。
-        """
-        try:
-            return await recommend_food(
-                req.destination, req.num_travelers,
-                req.num_elderly, req.num_children,
-                req.budget_min, req.budget_max,
-            )
-        except Exception as e:
-            logger.error("Food recommendation failed: %s", e)
-            return "美食推荐暂时不可用"
+        通用的带异常保护的异步调用包装器。
+        任何子服务调用失败时都会优雅降级，返回占位文本而非抛出异常。
 
-    async def _safe_accommodation(self, req) -> str:
-        """
-        带异常保护的住宿推荐调用。
-        如果推荐服务发生异常，返回占位文本而非抛出异常。
-        """
-        try:
-            return await recommend_accommodation(
-                req.destination, req.num_travelers,
-                req.num_elderly, req.num_children,
-                req.budget_min, req.budget_max,
-            )
-        except Exception as e:
-            logger.error("Accommodation recommendation failed: %s", e)
-            return "住宿推荐暂时不可用"
-
-    async def _safe_transport(self, req) -> str:
-        """
-        带异常保护的交通规划调用。
-        如果规划服务发生异常，返回占位文本而非抛出异常。
+        参数:
+            name: 服务名称（仅用于日志），如 "Food"、"Accommodation"。
+            fn: 要调用的异步函数。
+            *args, **kwargs: 函数的参数，直接透传。
         """
         try:
-            return await plan_transport(
-                req.destination, req.departure_from,
-                req.start_date, req.end_date,
-                req.travel_mode.value, req.num_travelers,
-                req.num_elderly, req.num_children,
-                req.budget_min, req.budget_max,
-            )
+            return await fn(*args, **kwargs)
         except Exception as e:
-            logger.error("Transport planning failed: %s", e)
-            return "交通规划暂时不可用"
+            logger.error("%s failed: %s", name, e)
+            return f"{name}暂时不可用"
 
 
 # 全局单例 —— 整个应用共享同一个 TravelAgent 实例

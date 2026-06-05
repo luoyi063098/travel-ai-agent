@@ -527,11 +527,36 @@ async def chat_stream(req: ChatRequest):
             await memory_store.create_session(sid)            # 创建会话记录
             await memory_store.add_message(sid, "user", req.message)  # 保存用户消息
 
+            # 构建记忆上下文（用户偏好 + 历史消息），注入 system prompt
+            memory_context = await memory_store.build_context(sid, req.message)
+            extra_lines = []
+            for m in memory_context:
+                if m["role"] == "system":
+                    extra_lines.append(m["content"])
+                elif m["role"] == "assistant":
+                    extra_lines.append(f"[历史回复] {m['content'][:200]}")
+            memory_ctx = "\n".join(extra_lines) if extra_lines else ""
+
+            # 使用策略选择器获取最适合的 system prompt 风格
+            from agent.core import StrategySelector
+            strategy_name = StrategySelector.select(req.message, req.strategy) if hasattr(StrategySelector, 'select') else "react"
+
+            strategy_hints = {
+                "react": "分析用户需求，主动查询天气和距离等工具来辅助回答。",
+                "cot": "逐步分析用户问题的每个关键维度，最后给出综合建议。",
+                "tot": "从多个角度对比分析，给出最优方案。",
+                "decompose": "将用户需求拆解为子任务，逐一分析后综合回答。",
+                "reflexion": "认真评估每个建议的可行性，主动指出潜在问题。",
+                "mcts": "探索多个备选方案，选择最优解。",
+            }
+            hint = strategy_hints.get(strategy_name, "")
+
             # 在函数内部导入流式 LLM 接口，避免模块级别的循环依赖
             from agent.llm import chat_stream as llm_stream
-            # 构建对话消息列表，设置系统提示词
+            # 构建对话消息列表，合并记忆上下文和策略提示
+            system_content = "你是一个旅行规划助手。用中文回答，风格温暖专业。结合天气、人数、老人小孩等因素给出个性化建议。" + (f"\n\n{memory_ctx}" if memory_ctx else "") + (f"\n\n策略提示: {hint}" if hint else "")
             messages = [
-                {"role": "system", "content": "你是一个旅行规划助手。用中文回答，风格温暖专业。结合天气、人数、老人小孩等因素给出个性化建议。"},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": req.message},
             ]
 
@@ -543,7 +568,7 @@ async def chat_stream(req: ChatRequest):
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
 
             # 流式生成完成后，保存完整的助手回答到记忆存储
-            await memory_store.add_message(sid, "assistant", full, metadata={"strategy": "stream"})
+            await memory_store.add_message(sid, "assistant", full, metadata={"strategy": strategy_name})
             # 发送结束标记，包含会话 ID
             yield f"data: {json.dumps({'session_id': sid, 'done': True})}\n\n"
         except Exception as e:
