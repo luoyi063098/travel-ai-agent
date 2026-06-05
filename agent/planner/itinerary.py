@@ -1,7 +1,10 @@
-"""Itinerary generation with dynamic adjustment."""
+# agent/planner/itinerary.py
+# 行程规划模块 —— 根据目的地、人数、年龄、预算、天气等参数生成每日详细行程
 
-from agent.llm import chat
+from agent.llm import chat  # 导入 LLM 聊天接口
 
+# 行程规划的系统提示词模板
+# 使用 {占位符} 在运行时通过 .format() 注入具体参数
 ITINERARY_PROMPT = """你是一个专业旅行行程规划师，擅长设计合理、舒适、个性化的旅行路线。
 
 请根据以下信息规划详细行程，确保每个建议都切实可行。
@@ -66,39 +69,58 @@ def build_constraints(
     num_travelers: int,
     travel_mode: str,
 ) -> str:
+    """根据人群特征和出行方式构建约束条件描述字符串。"""
     constraints = []
+    # ---- 老人约束 ----
+    # 如果有老人同行，需要放缓行程节奏、增加休息点、优先无障碍设施
     if num_elderly > 0:
         constraints.append(f"- ⚠️ {num_elderly}位老人同行：行程节奏放缓，避免长时间步行和爬山，每2小时安排休息点，优选有电梯/无障碍设施的场所")
+    # ---- 儿童约束 ----
+    # 有小孩时需要亲子景点、危险规避、午休时间、儿童餐
     if num_children > 0:
         constraints.append(f"- ⚠️ {num_children}个小孩同行：安排亲子友好景点，避免危险活动，考虑午休时间，准备儿童餐选项")
+    # ---- 多人出行约束 ----
+    # 5 人以上需要提前预订、考虑包车
     if num_travelers >= 5:
         constraints.append(f"- ⚠️ 多人出行({num_travelers}人)：优先餐厅预订，考虑包车/打车，景点门票提前预约")
+    # ---- 出行方式约束 ----
+    # 自驾：注意停车和驾驶时长；高铁：注意接驳；飞机：注意机场距离
     if travel_mode == "car":
         constraints.append("- 🚗 自驾出行：考虑停车便利性，避免拥堵路段，每天驾驶不超过3小时")
     elif travel_mode == "train":
         constraints.append("- 🚄 高铁出行：注意车站与市区/景点的接驳交通")
     elif travel_mode == "plane":
         constraints.append("- ✈️ 飞行出行：考虑机场到市区的交通和时间，首尾日行程不宜过满")
+    # 如果没有特殊约束，返回"无特殊约束"
     return "\n".join(constraints) if constraints else "无特殊约束"
 
 
 def build_weather_section(weather_data: dict | None) -> str:
+    """根据天气数据构建天气信息的格式化字符串（供行程提示词使用）。"""
+    # 如果天气数据为空或包含错误信息，返回空字符串（不展示天气部分）
     if not weather_data or "error" in weather_data:
         return ""
     forecast = weather_data.get("forecast", [])
     if not forecast:
         return ""
 
+    # 逐日解析天气预报，生成 Markdown 格式的天气段落
     lines = ["\n## 天气信息"]
     for day in forecast:
+        # 提取该天的天气描述、降水概率
         w = day.get("weather", "")
         precip = day.get("precip_prob", 0)
-        flags = []
+        flags = []  # 存储警示标记
+
+        # ---- 降水风险评估 ----
+        # 降水概率 > 60% 或明确下雨/下雪：强烈建议准备室内备选
         if precip > 60 or w.endswith("雨") or w.endswith("雪"):
             flags.append("⚠️不适合户外活动，准备室内备选方案")
+        # 降水概率 30%~60%：建议携带雨具
         elif precip > 30:
             flags.append("建议携带雨具")
 
+        # 组装该天天气行：日期、天气、温度范围、降水概率、警示标记
         lines.append(
             f"- {day['date']}: {w}, {day.get('temp_min')}~{day.get('temp_max')}°C, "
             f"降水{precip}%"
@@ -110,11 +132,16 @@ def build_weather_section(weather_data: dict | None) -> str:
 def build_adjustment_notes(
     num_elderly: int, num_children: int, weather_data: dict | None = None
 ) -> str:
+    """构建动态调整说明，告知 LLM 在规划时需要考虑的特殊人群和天气因素。"""
     notes = []
+    # ---- 老人调整说明 ----
     if num_elderly > 0:
         notes.append(f"- 考虑到有{num_elderly}位老人，行程安排较为轻松，预留充足休息时间")
+    # ---- 儿童调整说明 ----
     if num_children > 0:
         notes.append(f"- 考虑到有{num_children}个小孩，安排寓教于乐的亲子景点")
+    # ---- 雨天调整说明 ----
+    # 遍历天气预报，如果有天降水概率超过 60%，提示该天以室内活动为主
     if weather_data and "forecast" in weather_data:
         for day in weather_data.get("forecast", []):
             if day.get("precip_prob", 0) > 60:
@@ -136,17 +163,25 @@ async def generate_itinerary(
     interests: list[str],
     weather_data: dict | None = None,
 ) -> str:
-    """Generate a complete itinerary."""
-    from datetime import datetime
+    """生成完整的每日行程规划。"""
+    from datetime import datetime  # 导入 datetime 用于日期计算
 
+    # ---- 解析日期并计算总天数 ----
+    # 输入格式为 "YYYY-MM-DD"，解析为 datetime 对象
     d1 = datetime.strptime(start_date, "%Y-%m-%d")
     d2 = datetime.strptime(end_date, "%Y-%m-%d")
+    # 计算天数：结束日期 - 开始日期 + 1（包含首尾两天）
     days = (d2 - d1).days + 1
 
+    # ---- 构建提示词的各个组成部分 ----
+    # 约束条件：根据人群和交通方式生成的文字约束
     constraints = build_constraints(num_elderly, num_children, num_travelers, travel_mode)
+    # 天气信息段：逐日天气预报
     weather_section = build_weather_section(weather_data)
+    # 动态调整说明：针对老人/小孩/雨天的特别提示
     adjustment_notes = build_adjustment_notes(num_elderly, num_children, weather_data)
 
+    # ---- 将参数注入提示词模板 ----
     prompt = ITINERARY_PROMPT.format(
         destination=destination,
         departure_from=departure_from,
@@ -162,7 +197,10 @@ async def generate_itinerary(
         interests=", ".join(interests) if interests else "无特殊偏好",
         weather_section=weather_section,
         constraints=constraints,
+        # 如果有调整说明则添加标题，否则置空
         adjustment_notes=f"## 动态调整说明\n{adjustment_notes}" if adjustment_notes else "",
     )
 
+    # ---- 调用 LLM 生成行程 ----
+    # temperature 设为 0.7 以鼓励多样化输出，max_tokens 设为 4096 以保证行程详细
     return await chat([{"role": "user", "content": prompt}], temperature=0.7, max_tokens=4096)

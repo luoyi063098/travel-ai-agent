@@ -1,7 +1,10 @@
-"""Destination introduction and research."""
+# agent/planner/destination.py
+# 目的地介绍模块 —— 生成目的地的全面介绍，包括景点、美食、季节、风俗等
 
-from agent.llm import chat
+from agent.llm import chat  # 导入 LLM 聊天接口
 
+# 目的地介绍的系统提示词（System Prompt）
+# 让 LLM 扮演资深旅行目的地专家，按固定结构输出全面介绍
 DESTINATION_PROMPT = """你是一个资深旅行目的地专家，对国内各大旅游城市和景点有深入了解。
 
 请为用户全面介绍旅行目的地，按以下结构组织：
@@ -38,15 +41,22 @@ async def get_destination_intro(
     interests: list[str] | None = None,
     travel_month: str | None = None,
 ) -> str:
-    """Generate destination introduction."""
+    """生成目的地介绍。"""
+    # ---- 处理用户兴趣偏好信息 ----
+    # 如果用户提供了兴趣偏好，拼接到提示词中，让推荐更有针对性
     interest_hint = ""
     if interests:
         interest_hint = f"\n用户兴趣偏好: {', '.join(interests)}"
 
+    # ---- 处理出行月份信息 ----
     month_hint = ""
     if travel_month:
         month_hint = f"\n出行月份: {travel_month}"
 
+    # ---- 组装最终提示词 ----
+    # 在系统提示词基础上，追加用户上下文（兴趣 + 月份），最后指定要介绍的目的地
     prompt = f"{DESTINATION_PROMPT}{interest_hint}{month_hint}\n\n请介绍目的地: {destination}"
 
+    # ---- 调用 LLM 生成 ----
+    # temperature 设为 0.6，在创造性和准确性之间取得平衡
     return await chat([{"role": "user", "content": prompt}], temperature=0.6)

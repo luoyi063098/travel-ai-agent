@@ -1,7 +1,11 @@
-"""Transportation planning."""
+# agent/planner/transport.py
+# 交通规划模块 —— 为大模型提供交通规划的提示词，生成包含大交通、市内交通、
+# 景点间交通及费用估算的完整交通方案
 
-from agent.llm import chat
+from agent.llm import chat  # 导入 LLM 聊天接口
 
+# 交通规划提示词模板
+# 让 LLM 扮演交通规划专家，根据出发地、目的地、出行方式等参数提供全面交通建议
 TRANSPORT_PROMPT = """你是一个交通规划专家，熟悉全国交通网络和城市内部交通。
 
 ## 场景信息
@@ -53,6 +57,8 @@ async def plan_transport(
     budget_min: int,
     budget_max: int,
 ) -> str:
+    """生成交通规划方案。"""
+    # 将场景参数注入交通规划提示词模板
     prompt = TRANSPORT_PROMPT.format(
         departure_from=departure_from,
         destination=destination,
@@ -65,4 +71,5 @@ async def plan_transport(
         budget_min=budget_min,
         budget_max=budget_max,
     )
+    # 调用 LLM 生成交通方案，temperature 设为 0.6 以保持信息的准确性和一致性
     return await chat([{"role": "user", "content": prompt}], temperature=0.6)

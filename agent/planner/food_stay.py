@@ -1,7 +1,10 @@
-"""Food and accommodation recommendations."""
+# agent/planner/food_stay.py
+# 美食与住宿推荐模块 —— 为大模型提供结构化的美食和住宿推荐提示词，并调用 LLM 生成
 
-from agent.llm import chat
+from agent.llm import chat  # 导入 LLM 聊天接口
 
+# ---- 美食推荐提示词 ----
+# 让 LLM 扮演资深美食推荐专家，根据目的地、人数、年龄、预算输出美食推荐
 FOOD_PROMPT = """你是一个资深美食推荐专家，对全国各地的特色美食和口碑餐厅了如指掌。
 
 ## 场景信息
@@ -35,6 +38,8 @@ FOOD_PROMPT = """你是一个资深美食推荐专家，对全国各地的特色
 
 请用中文回答，推荐具体可操作的选项。"""
 
+# ---- 住宿推荐提示词 ----
+# 让 LLM 扮演住宿推荐专家，根据场景信息推荐酒店/民宿，并考虑特殊需求
 ACCOMMODATION_PROMPT = """你是一个住宿推荐专家，熟悉各旅游城市的酒店和民宿资源。
 
 ## 场景信息
@@ -74,6 +79,8 @@ async def recommend_food(
     budget_min: int,
     budget_max: int,
 ) -> str:
+    """生成美食推荐内容。"""
+    # 将场景信息注入美食提示词模板
     prompt = FOOD_PROMPT.format(
         destination=destination,
         num_travelers=num_travelers,
@@ -82,6 +89,7 @@ async def recommend_food(
         budget_min=budget_min,
         budget_max=budget_max,
     )
+    # 调用 LLM 生成，temperature 设为 0.7 以获得多样化的推荐
     return await chat([{"role": "user", "content": prompt}], temperature=0.7)
 
 
@@ -93,6 +101,8 @@ async def recommend_accommodation(
     budget_min: int,
     budget_max: int,
 ) -> str:
+    """生成住宿推荐内容。"""
+    # 将场景信息注入住宿提示词模板
     prompt = ACCOMMODATION_PROMPT.format(
         destination=destination,
         num_travelers=num_travelers,
@@ -101,4 +111,5 @@ async def recommend_accommodation(
         budget_min=budget_min,
         budget_max=budget_max,
     )
+    # 调用 LLM 生成，temperature 设为 0.7 以获得多样化的推荐
     return await chat([{"role": "user", "content": prompt}], temperature=0.7)
