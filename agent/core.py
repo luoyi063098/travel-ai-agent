@@ -146,15 +146,17 @@ class TravelAgent:
             logger.error("Failed to save user message: %s", e)
 
         # 从记忆存储中获取历史消息和用户偏好，构建 LLM 上下文
-        # 此上下文会作为 system_extra 注入到推理引擎的 system prompt 中
+        # build_context 返回 [preferences_system, history_msg_1, ..., current_user_msg]
+        # 提取除最后一条（当前消息）之外的所有内容作为额外系统指令
         memory_context = await memory_store.build_context(session_id, message)
-        # 提取偏好和历史消息，拼接为额外系统指令
         extra_lines = []
-        for m in memory_context:
+        for m in memory_context[:-1]:  # 跳过最后一条，因为它是当前用户消息（已作为 task 传入推理引擎）
             if m["role"] == "system":
-                extra_lines.append(m["content"])     # 用户偏好
+                extra_lines.append(m["content"])                    # 用户偏好
+            elif m["role"] == "user":
+                extra_lines.append(f"[用户问过] {m['content'][:200]}")   # 历史问题
             elif m["role"] == "assistant":
-                extra_lines.append(f"[历史回复] {m['content'][:200]}")  # 最近回复摘要
+                extra_lines.append(f"[上次回答] {m['content'][:200]}")   # 历史回复
         system_extra = "\n".join(extra_lines) if extra_lines else ""
 
         selected = self.selector.select(message, strategy)

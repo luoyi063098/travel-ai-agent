@@ -544,11 +544,13 @@ async def chat_stream(req: ChatRequest):
             # 构建记忆上下文（用户偏好 + 历史消息），注入 system prompt
             memory_context = await memory_store.build_context(sid, req.message)
             extra_lines = []
-            for m in memory_context:
+            for m in memory_context[:-1]:  # 跳过最后一条（当前消息）
                 if m["role"] == "system":
                     extra_lines.append(m["content"])
+                elif m["role"] == "user":
+                    extra_lines.append(f"[用户问过] {m['content'][:200]}")
                 elif m["role"] == "assistant":
-                    extra_lines.append(f"[历史回复] {m['content'][:200]}")
+                    extra_lines.append(f"[上次回答] {m['content'][:200]}")
             memory_ctx = "\n".join(extra_lines) if extra_lines else ""
 
             # 使用策略选择器确定推理策略名称，用于匹配对应的策略提示
